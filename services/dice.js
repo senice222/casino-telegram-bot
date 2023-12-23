@@ -1,6 +1,7 @@
 const { User } = require("../models/UserModel");
 const { Dice } = require("../models/CreateDiceGameModel");
-const { startGameMenu } = require("../index");
+const mongoose = require("mongoose");
+const ObjectId = mongoose.Types.ObjectId;
 
 function startDiceGame(bot, chatId) {
   const opts = {
@@ -62,20 +63,20 @@ async function rollDice(bot, chatId, userChoice) {
 async function startCreateDiceGame(bot, chatId) {
   try {
     const user = await User.findOne({ id: chatId });
-    const createGameMessage = `➕ Создание игры в 🎲 DICE\n\n— Минимум: 1 $\n— Баланс: ${user.balance} $\n\nℹ️ Введите размер ставки`;
+    const createGameMessage = `➕ Создание игры в 🎲 DICE\n\n— Минимум: 1 $\n— Баланс: ${user.balance} $\n\nℹ️ Введите размер ставки и название игры (разделенные пробелом, например, "10 MyGame")`;
     bot.sendMessage(chatId, createGameMessage);
 
     bot.once("text", (msg) => {
       const userId = msg.from.id;
-      const amount = msg.text;
-      createDiceGame(bot, userId, amount);
+      const [amount, gameName] = msg.text.split(/\s+/); 
+      createDiceGame(bot, userId, amount, gameName);
     });
   } catch (e) {
     console.log(e);
   }
 }
 
-async function createDiceGame(bot, userId, amount) {
+async function createDiceGame(bot, userId, amount, gameName) {
   try {
     const user = await User.findOne({ id: userId });
 
@@ -96,6 +97,7 @@ async function createDiceGame(bot, userId, amount) {
     }
 
     const doc = new Dice({
+      name: gameName,
       ownerId: userId,
       amount,
       users: [userId],
@@ -150,45 +152,47 @@ async function leaveDiceGame(bot, chatId) {
 }
 
 async function availableDiceGames(bot, chatId) {
-  console.log(chatId)
   const games = await Dice.find({ status: "pending" });
-
   if (games.length === 0) {
     bot.sendMessage(chatId, "Нет доступных игр.");
     return;
   }
 
-  const inlineKeyboard = games.map((game, index) => [
+  const Keyboard = games.map((game) => [
     {
-      text: `🎲 Game ${index + 1} - ${game.amount}$`,
-      callback_data: `join_dice_game_${game._id}`,
+      text: `🎲 ${game.name} - ${game.amount}$`,
     },
   ]);
-  inlineKeyboard.push([{ text: "⬅️ Назад", callback_data: "games" }]);
+
+  Keyboard.push([{ text: "⬅️ Назад" }]);
+
   const options = {
     reply_markup: {
-      inline_keyboard: inlineKeyboard,
+      keyboard: Keyboard,
+      resize_keyboard: true,
+      one_time_keyboard: true,
     },
   };
 
   bot.sendMessage(chatId, "Выберите игру для подключения:", options);
 }
-async function handleJoinGameCallback(chatId, data) {
-  const gameId = data.replace('join_game_', '');
+async function handleJoinGameCallback(bot, chatId, gameName) {
+  const game = await Dice.findOne({ name: gameName, status: "pending" });
 
-  const game = await Dice.findById(gameId);
-  console.log(game, chatId);
-  // if (game && game.status === 'pending') {
-  //   const player1Message = `Игра начинается! Удачи вам, игрок ${game.users[0]}!`;
-  //   const player2Message = `Игра начинается! Удачи вам, игрок ${game.users[1]}!`;
+  if (!game) {
+    bot.sendMessage(chatId, "Игра не найдена или уже начата.");
+    return;
+  }
 
-  //   bot.sendMessage(game.users[0], player1Message);
-  //   bot.sendMessage(game.users[1], player2Message);
+  game.status = "playing";
+  game.users.push(chatId);
+  await game.save();
 
-  // } else {
-  //   const errorMessage = 'Извините, игра не может быть начата. Возможно, она уже началась или была отменена.';
-  //   bot.sendMessage(chatId, errorMessage);
-  // }
+  const player1Message = `Игра начинается! Удачи вам, игрок ${game.users[0]}!`;
+  const player2Message = `Игра начинается! Удачи вам, игрок ${game.users[1]}!`;
+
+  bot.sendMessage(game.users[0], player1Message);
+  bot.sendMessage(game.users[1], player2Message);
 }
 
 module.exports = {

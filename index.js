@@ -7,6 +7,7 @@ const {
   startCreateDiceGame,
   leaveDiceGame,
   availableDiceGames,
+  handleJoinGameCallback,
 } = require("./services/dice");
 const {
   requestAmountCrypto,
@@ -283,10 +284,19 @@ const start = () => {
     }
   });
 
+  bot.onText(/⬅️ Назад/, (msg) => {
+    showGames(msg)
+  })
+
+  bot.onText(/🎲 (.+) - (\d+)\$/, (msg, match) => {
+    const gameName = match[1];
+    handleJoinGameCallback(bot, msg.chat.id, gameName);
+  });
+
   bot.on("callback_query", (callbackQuery) => {
     const chatId = callbackQuery.message.chat.id;
     const userId = callbackQuery.message.chat.username;
-    console.log(callbackQuery);
+
     switch (callbackQuery.data) {
       case "guessMore":
       case "guessLess":
@@ -309,14 +319,8 @@ const start = () => {
         userState[chatId] = "Basketball";
         startBasketballGame(chatId);
         break;
-      case "playGame":
-        bot.sendMessage(chatId, "Обрано гру №10501402");
-        break;
       case "createDiceGame":
         startCreateDiceGame(bot, chatId);
-        break;
-      case callbackQuery.data.startsWith("join_dice_game_"):
-        handleJoinGameCallback(chatId, callbackQuery.data);
         break;
       case "diceListGame":
         availableDiceGames(bot, chatId);
@@ -375,7 +379,6 @@ const start = () => {
         initiateWithdrawal();
         break;
       case "home":
-        delete userState[chatId];
         startGameMenu(chatId);
         break;
       case "games":
@@ -404,9 +407,9 @@ const start = () => {
         delete userState[chatId];
         bot.sendMessage(chatId, "Вы отменили текущее действие.");
         break;
-      default:
-        const errorMessage = "Неизвестный запрос.";
-        bot.sendMessage(chatId, errorMessage);
+      // default:
+      //   const errorMessage = "Неизвестный запрос.";
+      //   bot.sendMessage(chatId, errorMessage);
     }
   });
 

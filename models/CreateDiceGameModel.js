@@ -1,6 +1,7 @@
 const { Schema, model } = require("mongoose");
 
 const createDiceGameModelSchema = new Schema({
+  name: {type: String, required: true},
   ownerId: { type: Number, required: true},
   amount: { type: Number, required: true},
   users: {
@@ -8,7 +9,7 @@ const createDiceGameModelSchema = new Schema({
     required: true,
     validate: {
       validator: function (usersArray) {
-        return usersArray.length <= 1;
+        return usersArray.length <= 2;
       },
       message: "The maximum number of users is 2.",
     },
