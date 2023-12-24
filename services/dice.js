@@ -1,23 +1,6 @@
 const { User } = require("../models/UserModel");
 const { Dice } = require("../models/CreateDiceGameModel");
 const mongoose = require("mongoose");
-const ObjectId = mongoose.Types.ObjectId;
-
-function startDiceGame(bot, chatId) {
-  const opts = {
-    reply_markup: JSON.stringify({
-      inline_keyboard: [
-        [{ text: "Больше", callback_data: "guessMore" }],
-        [{ text: "Меньше", callback_data: "guessLess" }],
-      ],
-    }),
-  };
-  bot.sendMessage(
-    chatId,
-    "Угадайте, будет ли выпадение кубика больше или меньше 3.",
-    opts
-  );
-}
 
 async function rollDice(bot, chatId, userChoice) {
   const emoji = userChoice === "more" ? "⬆️" : "⬇️";
@@ -68,7 +51,7 @@ async function startCreateDiceGame(bot, chatId) {
 
     bot.once("text", (msg) => {
       const userId = msg.from.id;
-      const [amount, gameName] = msg.text.split(/\s+/); 
+      const [amount, gameName] = msg.text.split(/\s+/);
       createDiceGame(bot, userId, amount, gameName);
     });
   } catch (e) {
@@ -101,8 +84,10 @@ async function createDiceGame(bot, userId, amount, gameName) {
       ownerId: userId,
       amount,
       users: [userId],
+      choices: {}, // <= не создается
       status: "pending",
     });
+
     await doc.save();
     const successMessage = "🎲 Игра создана!";
 
@@ -121,6 +106,9 @@ async function createDiceGame(bot, userId, amount, gameName) {
     bot.sendMessage(userId, successMessage, options);
   } catch (error) {
     console.error(`Помилка при створенні гри: ${error}`);
+    const errorMessage = "Пожалуйста, проверьте правильность заполнения формы.";
+    bot.sendMessage(userId, errorMessage);
+    startCreateDiceGame(bot, userId);
   }
 }
 
@@ -176,6 +164,52 @@ async function availableDiceGames(bot, chatId) {
 
   bot.sendMessage(chatId, "Выберите игру для подключения:", options);
 }
+
+async function setUserChoice(bot, data, userId) {
+  const game = await Dice.findOne({ ownerId: userId });
+  game.choices[userId] = data;
+  await game.save();
+  bot.sendMessage(userId, "Your choice submitted!");
+}
+
+function startDiceGame(bot, chatId, game) {
+  const isPlayer1 = game.users[0] === chatId;
+  const isPlayer2 = game.users[1] === chatId;
+
+  if (isPlayer1 || isPlayer2) {
+    const otherPlayerChoice = isPlayer1
+      ? game.player2Choice
+      : game.player1Choice;
+
+    if (otherPlayerChoice) {
+      bot.sendMessage(
+        chatId,
+        `Ваш соперник уже сделал выбор: ${otherPlayerChoice}`
+      );
+    } else {
+      const opts = {
+        reply_markup: JSON.stringify({
+          inline_keyboard: [
+            [{ text: "Больше", callback_data: "guessMore" }],
+            [{ text: "Меньше", callback_data: "guessLess" }],
+          ],
+        }),
+      };
+
+      const message =
+        "Угадайте, будет ли выпадение кубика больше или меньше 3.";
+
+      if (isPlayer1) {
+        bot.sendMessage(game.users[0], message, opts);
+      } else {
+        bot.sendMessage(game.users[1], message, opts);
+      }
+    }
+  } else {
+    bot.sendMessage(chatId, "Вы не участвуете в текущей игре.");
+  }
+}
+
 async function handleJoinGameCallback(bot, chatId, gameName) {
   const game = await Dice.findOne({ name: gameName, status: "pending" });
 
@@ -193,6 +227,9 @@ async function handleJoinGameCallback(bot, chatId, gameName) {
 
   bot.sendMessage(game.users[0], player1Message);
   bot.sendMessage(game.users[1], player2Message);
+
+  startDiceGame(bot, game.users[0], game);
+  startDiceGame(bot, game.users[1], game);
 }
 
 module.exports = {
@@ -202,4 +239,5 @@ module.exports = {
   leaveDiceGame,
   availableDiceGames,
   handleJoinGameCallback,
+  setUserChoice,
 };

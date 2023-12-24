@@ -8,6 +8,7 @@ const {
   leaveDiceGame,
   availableDiceGames,
   handleJoinGameCallback,
+  setUserChoice
 } = require("./services/dice");
 const {
   requestAmountCrypto,
@@ -17,6 +18,7 @@ const {
 require("dotenv").config();
 
 const bot = new TelegramBot(process.env.TOKEN, { polling: true });
+
 const mongoURI = process.env.MONGO_URI;
 mongoose.connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true });
 const db = mongoose.connection;
@@ -285,8 +287,8 @@ const start = () => {
   });
 
   bot.onText(/⬅️ Назад/, (msg) => {
-    showGames(msg)
-  })
+    showGames(msg);
+  });
 
   bot.onText(/🎲 (.+) - (\d+)\$/, (msg, match) => {
     const gameName = match[1];
@@ -296,13 +298,12 @@ const start = () => {
   bot.on("callback_query", (callbackQuery) => {
     const chatId = callbackQuery.message.chat.id;
     const userId = callbackQuery.message.chat.username;
+    const data = callbackQuery.data;
 
     switch (callbackQuery.data) {
       case "guessMore":
       case "guessLess":
-        if (userState[chatId] === "Dice") {
-          rollDice(bot, chatId, callbackQuery.data.substr(5).toLowerCase());
-        }
+        setUserChoice(bot, data, chatId)
         break;
       case "newGame":
         if (userState[chatId] === "Dice") {

@@ -1,9 +1,13 @@
 const { Schema, model } = require("mongoose");
 
 const createDiceGameModelSchema = new Schema({
-  name: {type: String, required: true},
-  ownerId: { type: Number, required: true},
-  amount: { type: Number, required: true},
+  name: { type: String, required: true },
+  ownerId: { type: Number, required: true },
+  amount: { type: Number, required: true },
+  choices: {
+    type: Object,
+    default: {}, 
+  },
   users: {
     type: [Number],
     required: true,
@@ -16,7 +20,7 @@ const createDiceGameModelSchema = new Schema({
   },
   status: {
     type: String,
-    enum: ["pending", "playing", "error"], 
+    enum: ["pending", "playing", "error"],
     required: true,
   },
 });
