@@ -5,8 +5,8 @@ const createDiceGameModelSchema = new Schema({
   ownerId: { type: Number, required: true },
   amount: { type: Number, required: true },
   choices: {
-    type: Object,
-    default: {}, 
+    type: Array,
+    default: [],
   },
   users: {
     type: [Number],
@@ -23,7 +23,7 @@ const createDiceGameModelSchema = new Schema({
     enum: ["pending", "playing", "error"],
     required: true,
   },
-});
+}, { minimize: false });
 
 const Dice = model("Dice", createDiceGameModelSchema);
 
