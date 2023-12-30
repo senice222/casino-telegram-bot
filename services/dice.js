@@ -126,9 +126,8 @@ async function availableDiceGames(bot, chatId) {
 
 async function rollDice(bot, userIDs, userChoice) {
     const emoji = userChoice === "guessMore" ? "⬆️" : "⬇️";
-    const apiUrl = `https://api.telegram.org/bot${process.env.TOKEN}/sendDice?chat_id=${userIDs}`;
-    const choice = userChoice.join('')
-
+    const apiUrl = `https://api.telegram.org/bot${process.env.TOKEN}/sendDice?chat_id=${userIDs[1]}`;
+    const choice = userChoice.join('') // перестать отправлять кубик тут и получить данные аргументом функции
     try {
         const response = await fetch(apiUrl, {method: "POST"});
         const data = await response.json();
@@ -137,12 +136,15 @@ async function rollDice(bot, userIDs, userChoice) {
             setTimeout(() => {
                 const resultMessages = userIDs.map(userID => {
                     let resultMessage = "";
-                    let isWinner = false;
                     if ((choice === "guessMore" && diceValue > 3)) {
                         resultMessage = `Поздравляем! Вы угадали! Кубик: 🎲${diceValue} ${emoji}`;
-                        isWinner = true;
-                    } else {
-                        resultMessage = `Увы, вы не угадали. Кубик: 🎲${diceValue} ${emoji}`;
+                    } else if ((choice === "guessMore" && diceValue < 3)) {
+                        resultMessage = `Вы не угадали! Кубик: 🎲${diceValue} ${emoji}`;
+                    }
+                    if ((choice === "guessLess" && diceValue < 3)) {
+                        resultMessage = `Поздравляем! Вы угадали!. Кубик: 🎲${diceValue} ${emoji}`;
+                    } else if ((choice === "guessLess" && diceValue > 3)) {
+                        resultMessage = `Вы не угадали! Кубик: 🎲${diceValue} ${emoji}`;
                     }
 
                     const opts = {
@@ -153,9 +155,8 @@ async function rollDice(bot, userIDs, userChoice) {
                         }),
                     };
                     bot.sendMessage(userID, resultMessage, opts);
-                    return {userID, isWinner};
+                    return {userID};
                 });
-                console.log(resultMessages);
             }, 4200);
         } else {
             console.error("Failed to get dice value:", data);
@@ -193,7 +194,7 @@ async function setUserChoice(bot, data, userId) {
 
     const userChoiceIndex = game.choices.findIndex(userChoice => Object.keys(userChoice)[0] === userId);
     if (userChoiceIndex === -1) {
-        game.choices.push({ [userId]: [choice] });
+        game.choices.push({[userId]: [choice]});
     } else {
         game.choices[userChoiceIndex][userId].push(choice);
     }
@@ -206,7 +207,12 @@ async function setUserChoice(bot, data, userId) {
         const currentUserChoice = game.choices.find(item => Object.keys(item).includes(userId.toString()));
         const userIDs = [firstId, secondId];
         const userChoice = currentUserChoice[userId];
-        rollDice(bot, userIDs, userChoice);
+        // const apiUrl = `https://api.telegram.org/bot${process.env.TOKEN}/sendDice?chat_id=${userIDs}`;
+        // const choice = userChoice.join('')
+        //
+        // const response = await fetch(apiUrl, {method: "POST"});
+        // const data = await response.json();
+        rollDice(bot, userIDs, userChoice); // отправить результат кубика сюда
     }
 
     await game.save();
