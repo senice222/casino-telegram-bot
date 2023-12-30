@@ -124,43 +124,37 @@ async function availableDiceGames(bot, chatId) {
     bot.sendMessage(chatId, "Выберите игру для подключения:", options);
 }
 
-async function rollDice(bot, userIDs, userChoice) {
+async function rollDice(bot, userIDs, userChoice, data) {
     const emoji = userChoice === "guessMore" ? "⬆️" : "⬇️";
-    const apiUrl = `https://api.telegram.org/bot${process.env.TOKEN}/sendDice?chat_id=${userIDs[1]}`;
     const choice = userChoice.join('') // перестать отправлять кубик тут и получить данные аргументом функции
     try {
-        const response = await fetch(apiUrl, {method: "POST"});
-        const data = await response.json();
-        if (data.ok && data.result) {
-            const diceValue = data.result.dice.value;
-            setTimeout(() => {
-                const resultMessages = userIDs.map(userID => {
-                    let resultMessage = "";
-                    if ((choice === "guessMore" && diceValue > 3)) {
-                        resultMessage = `Поздравляем! Вы угадали! Кубик: 🎲${diceValue} ${emoji}`;
-                    } else if ((choice === "guessMore" && diceValue < 3)) {
-                        resultMessage = `Вы не угадали! Кубик: 🎲${diceValue} ${emoji}`;
-                    }
-                    if ((choice === "guessLess" && diceValue < 3)) {
-                        resultMessage = `Поздравляем! Вы угадали!. Кубик: 🎲${diceValue} ${emoji}`;
-                    } else if ((choice === "guessLess" && diceValue > 3)) {
-                        resultMessage = `Вы не угадали! Кубик: 🎲${diceValue} ${emoji}`;
-                    }
+        const diceValue = data.result.dice.value;
+        setTimeout(() => {
+            return userIDs.map(userID => {
+                let resultMessage = "";
+                if ((choice === "guessMore" && diceValue > 3)) {
+                    resultMessage = `Поздравляем! Вы угадали! Кубик: 🎲${diceValue} ${emoji}`;
+                } else if ((choice === "guessMore" && diceValue < 3)) {
+                    resultMessage = `Вы не угадали! Кубик: 🎲${diceValue} ${emoji}`;
+                }
+                if ((choice === "guessLess" && diceValue < 3)) {
+                    resultMessage = `Поздравляем! Вы угадали!. Кубик: 🎲${diceValue} ${emoji}`;
+                } else if ((choice === "guessLess" && diceValue > 3)) {
+                    resultMessage = `Вы не угадали! Кубик: 🎲${diceValue} ${emoji}`;
+                }
 
-                    const opts = {
-                        reply_markup: JSON.stringify({
-                            inline_keyboard: [
-                                [{text: "На главную", callback_data: "home"}],
-                            ],
-                        }),
-                    };
-                    bot.sendMessage(userID, resultMessage, opts);
-                    return {userID};
-                });
-            }, 4200);
-        } else {
-            console.error("Failed to get dice value:", data);
-        }
+                const opts = {
+                    reply_markup: JSON.stringify({
+                        inline_keyboard: [
+                            [{text: "На главную", callback_data: "home"}],
+                        ],
+                    }),
+                };
+                bot.sendMessage(userID, resultMessage, opts);
+                return {userID};
+            });
+        }, 4200);
+
     } catch (error) {
         console.error("Error fetching dice value:", error);
     }
@@ -201,18 +195,16 @@ async function setUserChoice(bot, data, userId) {
 
     const firstId = game.users[0].toString();
     const secondId = game.users[1].toString();
-    const isUserHasChoice = game.choices.some(item => Object.keys(item).includes(firstId) || Object.keys(item).includes(secondId));
 
-    if (isUserHasChoice) {
+    if (game.choices.length === 2) {
         const currentUserChoice = game.choices.find(item => Object.keys(item).includes(userId.toString()));
         const userIDs = [firstId, secondId];
         const userChoice = currentUserChoice[userId];
-        // const apiUrl = `https://api.telegram.org/bot${process.env.TOKEN}/sendDice?chat_id=${userIDs}`;
-        // const choice = userChoice.join('')
-        //
-        // const response = await fetch(apiUrl, {method: "POST"});
-        // const data = await response.json();
-        rollDice(bot, userIDs, userChoice); // отправить результат кубика сюда
+
+        const apiUrl = `https://api.telegram.org/bot${process.env.TOKEN}/sendDice?chat_id=${userIDs}`;
+        const response = await fetch(apiUrl, {method: "POST"});
+        const data = await response.json();
+        rollDice(bot, userIDs, userChoice, data);
     }
 
     await game.save();
