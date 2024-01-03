@@ -124,43 +124,54 @@ async function availableDiceGames(bot, chatId) {
     bot.sendMessage(chatId, "Выберите игру для подключения:", options);
 }
 
-async function rollDice(bot, userIDs, userChoice, data) {
-    const emoji = userChoice === "guessMore" ? "⬆️" : "⬇️";
-    const choice = userChoice.join('') // перестать отправлять кубик тут и получить данные аргументом функции
+async function rollDice(bot, game, data) {
     try {
         const diceValue = data.result.dice.value;
-        setTimeout(() => {
-            return userIDs.map(userID => {
-                let resultMessage = "";
-                if ((choice === "guessMore" && diceValue > 3)) {
-                    resultMessage = `Поздравляем! Вы угадали! Кубик: 🎲${diceValue} ${emoji}`;
-                } else if ((choice === "guessMore" && diceValue < 3)) {
-                    resultMessage = `Вы не угадали! Кубик: 🎲${diceValue} ${emoji}`;
-                }
-                if ((choice === "guessLess" && diceValue < 3)) {
-                    resultMessage = `Поздравляем! Вы угадали!. Кубик: 🎲${diceValue} ${emoji}`;
-                } else if ((choice === "guessLess" && diceValue > 3)) {
-                    resultMessage = `Вы не угадали! Кубик: 🎲${diceValue} ${emoji}`;
-                }
 
-                const opts = {
-                    reply_markup: JSON.stringify({
-                        inline_keyboard: [
-                            [{text: "На главную", callback_data: "home"}],
-                        ],
-                    }),
-                };
-                bot.sendMessage(userID, resultMessage, opts);
-                return {userID};
+        const ch = game.choices.map(item => {
+            const userId = Object.keys(item)[0];
+            const choiceValue = Object.values(item)[0];
+            return [{ [userId]: choiceValue.toString() }];
+        });
+        const flattenedCh = ch.flat();
+
+        setTimeout(() => {
+            flattenedCh.forEach(userChoice => {
+                const userId = Object.keys(userChoice)[0];
+                const choice = Object.values(userChoice)[0];
+
+                switch (choice) {
+                    case 'guessMore':
+                        if (diceValue > 3) {
+                            bot.sendMessage(userId, `You guessed correctly!`)
+                        } else {
+                            bot.sendMessage(userId, `You guessed incorrectly!`)
+                        }
+                        break;
+                    case 'guessLess':
+                        if (diceValue < 3) {
+                            bot.sendMessage(userId, `You guessed correctly!`)
+                        } else {
+                            bot.sendMessage(userId, `You guessed incorrectly!`)
+                        }
+                        break;
+                    default:
+                        console.log(`Unknown choice for user ${userId}`);
+                }
             });
         }, 4200);
-
     } catch (error) {
         console.error("Error fetching dice value:", error);
     }
 }
 
-function validateSetUserVariants(game, userId, choice) {
+
+async function setUserChoice(bot, data, userId) {
+    const parts = data.split('_');
+    const choice = parts[0];
+    const gameId = parts[1];
+    const game = await Dice.findById(gameId);
+
     if (!game) {
         console.error(`No game found for userId: ${userId}`);
         return;
@@ -176,22 +187,14 @@ function validateSetUserVariants(game, userId, choice) {
     if (game.choices.some(userChoice => Object.values(userChoice).includes(choice))) {
         bot.sendMessage(userId, "Цей варіант вже був обраний іншим користувачем.");
     }
-}
 
-async function setUserChoice(bot, data, userId) {
-    const parts = data.split('_');
-    const choice = parts[0];
-    const gameId = parts[1];
-    const game = await Dice.findById(gameId);
-
-    validateSetUserVariants(game, userId, choice);
-
-    const userChoiceIndex = game.choices.findIndex(userChoice => Object.keys(userChoice)[0] === userId);
+    const userChoiceIndex = game.choices.findIndex(userChoice => Object.keys(userChoice)[0] === userId); // переписать логику добавления
     if (userChoiceIndex === -1) {
         game.choices.push({[userId]: [choice]});
     } else {
         game.choices[userChoiceIndex][userId].push(choice);
     }
+    await game.save();
 
     const firstId = game.users[0].toString();
     const secondId = game.users[1].toString();
@@ -199,15 +202,12 @@ async function setUserChoice(bot, data, userId) {
     if (game.choices.length === 2) {
         const currentUserChoice = game.choices.find(item => Object.keys(item).includes(userId.toString()));
         const userIDs = [firstId, secondId];
-        const userChoice = currentUserChoice[userId];
 
         const apiUrl = `https://api.telegram.org/bot${process.env.TOKEN}/sendDice?chat_id=${userIDs}`;
         const response = await fetch(apiUrl, {method: "POST"});
         const data = await response.json();
-        rollDice(bot, userIDs, userChoice, data);
+        rollDice(bot, game, data);
     }
-
-    await game.save();
     bot.sendMessage(userId, "Ваш вибір зроблено!");
 }
 
