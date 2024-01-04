@@ -124,35 +124,66 @@ async function availableDiceGames(bot, chatId) {
     bot.sendMessage(chatId, "Выберите игру для подключения:", options);
 }
 
+async function toWinner(userId, game) {
+    try {
+        const user = await User.findOne({id: userId});
+        user.balance = (parseInt(user.balance) + game.amount).toString();
+        await user.save();
+    } catch (error) {
+        console.error(`Error updating winner's balance: ${error.message}`);
+    }
+}
+
+async function toLooser(userId, game) {
+    try {
+        const user = await User.findOne({id: userId});
+        user.balance = (parseInt(user.balance) - game.amount).toString();
+        await user.save();
+    } catch (error) {
+        console.error(`Error updating loser's balance: ${error.message}`);
+    }
+}
+
 async function rollDice(bot, game, data) {
     try {
         const diceValue = data.result.dice.value;
-
-        const ch = game.choices.map(item => {
+        const choiceList = game.choices.map(item => {
             const userId = Object.keys(item)[0];
             const choiceValue = Object.values(item)[0];
-            return [{ [userId]: choiceValue.toString() }];
+            return [{[userId]: choiceValue.toString()}];
         });
-        const flattenedCh = ch.flat();
+        const flattenedList = choiceList.flat();
+        let obj = {winner: null}
+        const options = {
+            reply_markup: JSON.stringify({
+                inline_keyboard: [[{text: "На главную", callback_data: "home"}]],
+            }),
+        };
 
         setTimeout(() => {
-            flattenedCh.forEach(userChoice => {
+            flattenedList.forEach(userChoice => {
                 const userId = Object.keys(userChoice)[0];
                 const choice = Object.values(userChoice)[0];
 
                 switch (choice) {
                     case 'guessMore':
                         if (diceValue > 3) {
-                            bot.sendMessage(userId, `You guessed correctly!`)
+                            bot.sendMessage(userId, `You guessed correctly!`, options)
+                            obj.winner = userId
+                            toWinner(userId, game)
                         } else {
-                            bot.sendMessage(userId, `You guessed incorrectly!`)
+                            bot.sendMessage(userId, `You guessed incorrectly!`, options)
+                            toLooser(userId, game)
                         }
                         break;
                     case 'guessLess':
                         if (diceValue < 3) {
-                            bot.sendMessage(userId, `You guessed correctly!`)
+                            bot.sendMessage(userId, `You guessed correctly!`, options)
+                            obj.winner = userId
+                            toWinner(userId, game)
                         } else {
-                            bot.sendMessage(userId, `You guessed incorrectly!`)
+                            bot.sendMessage(userId, `You guessed incorrectly!`, options)
+                            toLooser(userId, game)
                         }
                         break;
                     default:
@@ -163,8 +194,8 @@ async function rollDice(bot, game, data) {
     } catch (error) {
         console.error("Error fetching dice value:", error);
     }
-}
 
+}
 
 async function setUserChoice(bot, data, userId) {
     const parts = data.split('_');
