@@ -1,6 +1,5 @@
 const {User} = require("../models/UserModel");
 const {Dice} = require("../models/CreateDiceGameModel");
-const mongoose = require("mongoose");
 
 async function startCreateDiceGame(bot, chatId) {
     try {

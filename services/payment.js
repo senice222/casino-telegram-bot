@@ -147,7 +147,7 @@ async function transferCoins(userId, asset, amount) {
     }
 }
 
-async function withdrawalAmount(bot, chatId, userId) {
+async function withdrawalAmount(bot, chatId) {
     return bot
         .sendMessage(chatId, "Какую сумму вы хотите вывести? (Только цифры)", {
             reply_markup: {force_reply: true},
@@ -203,4 +203,22 @@ async function withdrawalAmount(bot, chatId, userId) {
         });
 }
 
-module.exports = {requestAmountCrypto, transferCoins, withdrawalAmount};
+async function initiateWithdrawal(bot, userId) {
+    try {
+        const user = await User.findOne({telegramId: userId});
+
+        if (user.balance <= 0.99) {
+            bot.answerCallbackQuery({
+                callback_query_id: callbackQuery.id,
+                text: "❗️ Минимальная сумма для вывода 5 долларов",
+                show_alert: true,
+            });
+        } else {
+            return withdrawalAmount(bot, chatId, userId);
+        }
+    } catch (error) {
+        console.error("Error initiating withdrawal:", error.message);
+    }
+}
+
+module.exports = {requestAmountCrypto, transferCoins, withdrawalAmount, initiateWithdrawal};

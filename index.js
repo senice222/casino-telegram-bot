@@ -3,7 +3,6 @@ const mongoose = require("mongoose");
 const {User} = require("./models/UserModel");
 const {
     startDiceGame,
-    rollDice,
     startCreateDiceGame,
     leaveDiceGame,
     availableDiceGames,
@@ -12,8 +11,11 @@ const {
 const {
     requestAmountCrypto,
     transferCoins,
-    withdrawalAmount,
+    withdrawalAmount, initiateWithdrawal,
 } = require("./services/payment");
+const {startBasketballGame, handleBasketballGame} = require("./services/basketball");
+const {showBonuses, showReferralSystem} = require("./services/referral");
+const {bootstrap, profileCommandHandler} = require("./commands/bootstrap");
 require("dotenv").config();
 
 const bot = new TelegramBot(process.env.TOKEN, {polling: true});
@@ -46,110 +48,6 @@ function startGameMenu(chatId) {
     };
 
     bot.sendMessage(chatId, "Выберите раздел:", opts);
-}
-
-function showBonuses(chatId) {
-    const opts = {
-        reply_markup: JSON.stringify({
-            inline_keyboard: [
-                [{text: "🔗 Реферальная система", callback_data: "referralBonus"}],
-            ],
-        }),
-    };
-
-    bot.sendMessage(chatId, "🎁 Доступні бонуси:", opts);
-}
-
-function showReferralSystem(chatId) {
-    const referralMessage =
-        `🔗 Ваше реферальне посилання - https://t.me/azimut_casino_bot?start=${chatId}\n\n` +
-        `🗣 Реферали: 0\n` +
-        `💸 Прибуток з рефералів: 0 грн\n` +
-        `- - - - -\n` +
-        `Умови:\n` +
-        `1️⃣ Людина повинна перейти по вашому реферальному посиланні і почати користуватися ботом, тоді вам зарахується реферал\n` +
-        `2️⃣ При кожному депозиті вашого реферала ви отримаєте 10% від його поповнення`;
-
-    const opts = {
-        reply_markup: JSON.stringify({
-            inline_keyboard: [[{text: "На главную", callback_data: "home"}]],
-        }),
-    };
-
-    bot.sendMessage(chatId, referralMessage, opts);
-}
-
-function startBasketballGame(chatId) {
-    const opts = {
-        reply_markup: JSON.stringify({
-            inline_keyboard: [
-                [{text: "Да", callback_data: "yesBB"}],
-                [{text: "Нет", callback_data: "noBB"}],
-            ],
-        }),
-    };
-    userState[chatId] = "Basketball";
-    bot.sendMessage(chatId, "Попадет ли мяч в кольцо?", opts);
-
-    // bot
-    //   .sendDice(chatId, { emoji: "🏀" })
-    //   .then((message) => {
-    //     console.log(message);
-    //     const diceValue = message.dice.value;
-    //     handleBasketballGame(chatId, diceValue);
-    //   })
-    //   .catch((error) => {
-    //     console.error("Error sending dice:", error);
-    //   });
-
-    // userState[chatId] = "Basketball";
-}
-
-function throwBasketball(userChoice) {
-    bot
-        .sendDice(chatId, {emoji: "🏀"})
-        .then((message) => {
-            const diceValue = message.dice.value;
-            handleBasketballGame(chatId, diceValue, userChoice);
-        })
-        .catch((error) => {
-            console.error("Error sending dice:", error);
-        });
-
-    userState[chatId] = "Basketball";
-}
-
-async function handleBasketballGame(chatId, userChoice) {
-    try {
-        const data = await bot.sendDice(chatId, {emoji: "🏀"});
-        const diceValue = data.dice.value;
-
-        setTimeout(() => {
-            let resultMessage = "";
-            if (
-                (userChoice === "yesBB" && diceValue === 5) ||
-                diceValue === 4 ||
-                (userChoice === "noBB" && diceValue < 4)
-            ) {
-                resultMessage = `Поздравляем! Мяч попал в корзину! Вы выйграли.`;
-            } else {
-                resultMessage = `Увы, мяч не попал в корзину. Вы проиграли.`;
-            }
-
-            const opts = {
-                reply_markup: JSON.stringify({
-                    inline_keyboard: [
-                        [{text: "Новая игра", callback_data: "newGame"}],
-                        [{text: "На главную", callback_data: "home"}],
-                    ],
-                }),
-            };
-
-            bot.sendMessage(chatId, resultMessage, opts);
-        }, 4200);
-    } catch (error) {
-        console.error("Error fetching dice value:", error);
-    }
 }
 
 async function startDartsGame(chatId) {
@@ -190,35 +88,12 @@ function showGames(chatId) {
 // --------------------- start ----------------------------
 
 const start = () => {
-    bot.onText(/\/start/, async (msg) => {
-        const userId = msg.from.username;
-
-        try {
-            let user = await User.findOne({telegramId: userId});
-
-            if (!user) {
-                const doc = new User({
-                    telegramId: msg.from.username,
-                    id: msg.from.id,
-                });
-
-                await doc.save();
-            }
-
-            const chatId = msg.chat.id;
-            startGameMenu(chatId);
-        } catch (error) {
-            console.error("Error processing /start command:", error);
-        }
-    });
-
-    bot.onText(/Игры/, (msg) => {
-        showGames(msg);
-    });
+    bot.onText(/\/start/,  (msg) => bootstrap(msg, startGameMenu));
+    bot.onText(/Игры/, (msg) => showGames(msg));
 
     bot.onText(/Бонусы/, (msg) => {
         const chatId = msg.chat.id;
-        showBonuses(chatId);
+        showBonuses(bot, chatId);
     });
 
     bot.onText(/Cancel/, (msg) => {
@@ -227,7 +102,7 @@ const start = () => {
         startGameMenu(chatId);
     });
 
-    bot.onText(/Dice/, (msg) => {
+    bot.onText(/Dic e/, (msg) => {
         const chatId = msg.chat.id;
         const opts = {
             reply_markup: JSON.stringify({
@@ -240,56 +115,13 @@ const start = () => {
         };
         bot.sendMessage(chatId, "🎲 DICE", opts);
     });
-
     bot.onText(/Basketball/, (msg) => {
         const chatId = msg.chat.id;
         userState[chatId] = "Basketball";
-        startBasketballGame(chatId);
+        startBasketballGame(bot, chatId, userState);
     });
-
-    bot.onText(/Профиль/, async (msg) => {
-        const tgId = msg.from.username;
-
-        try {
-            let user = await User.findOne({telegramId: tgId});
-
-            if (user) {
-                const profileData = `
- ♣️ AMG ПРОФИЛЬ ♦️
-
-🗣 Рефералы: ${user.referals}
-👤 Ваш ID: ${user.id}
-💰 Баланс: ${user.balance}$
-💸 Пополнений: ${user.replenishment}
-📤 Выводов: ${user.withdrawal}
-`;
-                const chatId = msg.chat.id;
-                const keyboard = {
-                    inline_keyboard: [
-                        [
-                            {text: "📤 Пополнить", callback_data: "topup"},
-                            {text: "📤 Вывод", callback_data: "withdraw"},
-                        ],
-                        [{text: "На главную", callback_data: "home"}],
-                    ],
-                };
-
-                const opts = {
-                    reply_markup: JSON.stringify(keyboard),
-                };
-                bot.sendMessage(chatId, profileData, opts);
-            } else {
-                const chatId = msg.chat.id;
-                bot.sendMessage(chatId, "Пользователь не найден в базе данных.");
-            }
-        } catch (error) {
-            console.error("Ошибка при обработке команды /profile:", error);
-        }
-    });
-
-    bot.onText(/⬅️ Назад/, (msg) => {
-        showGames(msg);
-    });
+    bot.onText(/Профиль/, (msg) => profileCommandHandler(bot, msg));
+    bot.onText(/⬅️ Назад/, (msg) => showGames(msg));
 
     bot.onText(/🎲 (.+) - (\d+)\$/, (msg, match) => {
         const gameName = match[1];
@@ -311,16 +143,17 @@ const start = () => {
                 if (userState[chatId] === "Dice") {
                     startDiceGame(bot, chatId);
                 } else if (userState[chatId] === "Basketball") {
-                    startBasketballGame(chatId);
+                    startBasketballGame(chatId, userState);
                 }
                 break;
             case "yesBB":
             case "noBB":
-                handleBasketballGame(chatId, callbackQuery.data);
+                handleBasketballGame(bot, chatId, callbackQuery.data);
                 break;
             case "playBasketball":
+                console.log(callbackQuery)
                 userState[chatId] = "Basketball";
-                startBasketballGame(chatId);
+                startBasketballGame(bot, chatId, userState);
                 break;
             case "createDiceGame":
                 startCreateDiceGame(bot, chatId);
@@ -362,26 +195,8 @@ const start = () => {
                 requestAmountCrypto(bot, chatId, userId, callbackQuery.data);
                 break;
             case "withdraw":
-
-            async function initiateWithdrawal() {
-                try {
-                    const user = await User.findOne({telegramId: userId});
-
-                    if (user.balance <= 0.99) {
-                        bot.answerCallbackQuery({
-                            callback_query_id: callbackQuery.id,
-                            text: "❗️ Минимальная сумма для вывода 5 долларов",
-                            show_alert: true,
-                        });
-                    } else {
-                        return withdrawalAmount(bot, chatId, userId);
-                    }
-                } catch (error) {
-                    console.error("Error initiating withdrawal:", error.message);
-                }
-            }
-
-                initiateWithdrawal();
+                console.log('withdraw')
+                initiateWithdrawal(bot, userId);
                 break;
             case "home":
                 startGameMenu(chatId);
@@ -406,7 +221,7 @@ const start = () => {
                 });
                 break;
             case "referralBonus":
-                showReferralSystem(chatId);
+                showReferralSystem(bot, chatId);
                 break;
             case "cancel":
                 delete userState[chatId];
@@ -419,7 +234,6 @@ const start = () => {
     });
 
     bot.on("message", (msg) => {
-        const chatId = msg.chat.id;
         const text = msg.text;
 
         switch (text) {
