@@ -1,5 +1,9 @@
 
-function startBasketballGame(bot, chatId, userState) {
+
+
+
+
+function startBasketballGame(bot, chatId, userState) { // setUserChoice
     const opts = {
         reply_markup: JSON.stringify({
             inline_keyboard: [
@@ -12,7 +16,7 @@ function startBasketballGame(bot, chatId, userState) {
     bot.sendMessage(chatId, "Попадет ли мяч в кольцо?", opts);
 }
 
-async function handleBasketballGame(bot, chatId, userChoice) {
+async function handleBasketballGame(bot, chatId, userChoice) { // gameplay
     try {
         const data = await bot.sendDice(chatId, {emoji: "🏀"});
         const diceValue = data.dice.value;

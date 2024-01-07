@@ -1,16 +1,29 @@
 const {User} = require("../models/UserModel");
-const {Dice} = require("../models/CreateDiceGameModel");
+const {Dice} = require("../models/DiceGame");
+const {isValidChoice} = require("../validations/diceGameValidator");
 
 async function startCreateDiceGame(bot, chatId) {
     try {
         const user = await User.findOne({id: chatId});
         const createGameMessage = `➕ Создание игры в 🎲 DICE\n\n— Минимум: 1 $\n— Баланс: ${user.balance} $\n\nℹ️ Введите размер ставки и название игры (разделенные пробелом, например, "10 MyGame")`;
-        bot.sendMessage(chatId, createGameMessage);
+        const opts = {
+            reply_markup: JSON.stringify({
+                keyboard: [
+                    [{ text: "⬅️ Назад" }],
+                ],
+                resize_keyboard: true,
+                one_time_keyboard: true,
+            }),
+        };
 
-        bot.once("text", (msg) => {
+        bot.sendMessage(chatId, createGameMessage, opts);
+
+        bot.once("text", async (msg) => {
+            const text = msg.text
             const userId = msg.from.id;
-            const [amount, gameName] = msg.text.split(/\s+/);
-            createDiceGame(bot, userId, amount, gameName);
+            if (text === "⬅️ Назад") return
+            const [amount, gameName] = text.split(/\s+/);
+            await createDiceGame(bot, userId, amount, gameName)
         });
     } catch (e) {
         console.log(e);
@@ -20,10 +33,7 @@ async function startCreateDiceGame(bot, chatId) {
 async function createDiceGame(bot, userId, amount, gameName) {
     try {
         const user = await User.findOne({id: userId});
-
-        if (/^🙅‍♂️ Cancel$/i.test(amount)) {
-            return;
-        }
+        if (/^🙅‍♂️ Cancel$/i.test(amount)) return
 
         if (
             isNaN(amount) ||
@@ -32,7 +42,6 @@ async function createDiceGame(bot, userId, amount, gameName) {
         ) {
             const incorrectAmountMessage = `Ошибка: Неверное значение для ставки: ${amount}`;
             bot.sendMessage(userId, incorrectAmountMessage);
-
             startCreateDiceGame(bot, userId);
             return;
         }
@@ -72,7 +81,6 @@ async function createDiceGame(bot, userId, amount, gameName) {
 
 async function leaveDiceGame(bot, chatId) {
     const message = "Доступные игры:";
-
     try {
         const existingGame = await Dice.findOneAndDelete({ownerId: chatId});
         if (existingGame) {
@@ -103,15 +111,12 @@ async function availableDiceGames(bot, chatId) {
         bot.sendMessage(chatId, "Нет доступных игр.");
         return;
     }
-
-    const Keyboard = games.map((game) => [
+    const Keyboard = games.map(game => [
         {
             text: `🎲 ${game.name} - ${game.amount}$`,
         },
     ]);
-
     Keyboard.push([{text: "⬅️ Назад"}]);
-
     const options = {
         reply_markup: {
             keyboard: Keyboard,
@@ -119,7 +124,6 @@ async function availableDiceGames(bot, chatId) {
             one_time_keyboard: true,
         },
     };
-
     bot.sendMessage(chatId, "Выберите игру для подключения:", options);
 }
 
@@ -151,15 +155,15 @@ async function rollDice(bot, game, data) {
             const choiceValue = Object.values(item)[0];
             return [{[userId]: choiceValue.toString()}];
         });
-        const flattenedList = choiceList.flat();
-        let obj = {winner: null}
         const options = {
             reply_markup: JSON.stringify({
                 inline_keyboard: [[{text: "На главную", callback_data: "home"}]],
             }),
         };
+        const flattenedList = choiceList.flat();
+        let obj = { winner: null }
 
-        setTimeout(() => {
+        setTimeout(async () => {
             flattenedList.forEach(userChoice => {
                 const userId = Object.keys(userChoice)[0];
                 const choice = Object.values(userChoice)[0];
@@ -189,11 +193,12 @@ async function rollDice(bot, game, data) {
                         console.log(`Unknown choice for user ${userId}`);
                 }
             });
+            game.status = 'end'
+            await game.save()
         }, 4200);
     } catch (error) {
         console.error("Error fetching dice value:", error);
     }
-
 }
 
 async function setUserChoice(bot, data, userId) {
@@ -202,87 +207,70 @@ async function setUserChoice(bot, data, userId) {
     const gameId = parts[1];
     const game = await Dice.findById(gameId);
 
-    if (!game) {
-        console.error(`No game found for userId: ${userId}`);
-        return;
-    }
-    if (game.choices.some(item => item[userId])) {
-        bot.sendMessage(userId, "Ви вже зробили вибір.");
-        return;
-    }
-    if (game.choices.some(userChoice => userChoice[userId] === choice)) {
-        bot.sendMessage(userId, "Ви вже обрали цей варіант раніше.");
-        return;
-    }
-    if (game.choices.some(userChoice => Object.values(userChoice).includes(choice))) {
-        bot.sendMessage(userId, "Цей варіант вже був обраний іншим користувачем.");
-    }
+    if (await isValidChoice(bot, game, userId, choice)) {
+        const userChoiceIndex = game.choices.findIndex(userChoice => Object.keys(userChoice)[0] === userId);
+        if (userChoiceIndex === -1) {
+            game.choices.push({[userId]: [choice]});
+        } else {
+            game.choices[userChoiceIndex][userId].push(choice);
+        }
+        await game.save();
 
-    const userChoiceIndex = game.choices.findIndex(userChoice => Object.keys(userChoice)[0] === userId); // переписать логику добавления
-    if (userChoiceIndex === -1) {
-        game.choices.push({[userId]: [choice]});
-    } else {
-        game.choices[userChoiceIndex][userId].push(choice);
+        if (game.choices.length === 2) {
+            const firstId = game.users[0].toString();
+            const secondId = game.users[1].toString();
+            const userIDs = [firstId, secondId];
+
+            const apiUrl = `https://api.telegram.org/bot${process.env.TOKEN}/sendDice?chat_id=${userIDs}`;
+            const response = await fetch(apiUrl, {method: "POST"});
+            const data = await response.json();
+            rollDice(bot, game, data);
+        }
+        bot.sendMessage(userId, "Ваш вибір зроблено!");
     }
-    await game.save();
-
-    const firstId = game.users[0].toString();
-    const secondId = game.users[1].toString();
-
-    if (game.choices.length === 2) {
-        const currentUserChoice = game.choices.find(item => Object.keys(item).includes(userId.toString()));
-        const userIDs = [firstId, secondId];
-
-        const apiUrl = `https://api.telegram.org/bot${process.env.TOKEN}/sendDice?chat_id=${userIDs}`;
-        const response = await fetch(apiUrl, {method: "POST"});
-        const data = await response.json();
-        rollDice(bot, game, data);
-    }
-    bot.sendMessage(userId, "Ваш вибір зроблено!");
-}
-
-async function sendMessageToPlayer(bot, playerId, message, opts = {}) {
-    bot.sendMessage(playerId, message, opts);
 }
 
 async function startDiceGame(bot, chatId, gameName) {
     const game = await Dice.findOne({name: gameName})
-    game.users.push(chatId)
-    const isPlayer1 = game.users[0] === chatId;
-    const isPlayer2 = game.users[1] === chatId;
+    const joinedUser = await User.findOne({id: chatId})
+    if (joinedUser.balance >= game.amount) {
+        game.users.push(chatId)
+        const isPlayer1 = game.users[0] === chatId;
+        const isPlayer2 = game.users[1] === chatId;
+        if ((isPlayer1 || isPlayer2) && game.status === "pending") {
+            game.status = "playing";
+            await game.save();
 
-    if ((isPlayer1 || isPlayer2) && game.status === "pending") {
-        game.status = "playing";
-        await game.save();
+            const player1Message = `Игра начинается! Удачи вам, игрок ${game.users[0]}!`;
+            const player2Message = `Игра начинается! Удачи вам, игрок ${game.users[1]}!`;
 
-        const player1Message = `Игра начинается! Удачи вам, игрок ${game.users[0]}!`;
-        const player2Message = `Игра начинается! Удачи вам, игрок ${game.users[1]}!`;
+            bot.sendMessage(game.users[0], player1Message);
+            bot.sendMessage(game.users[1], player2Message);
 
-        await sendMessageToPlayer(bot, game.users[0], player1Message);
-        await sendMessageToPlayer(bot, game.users[1], player2Message);
+            const opts = {
+                reply_markup: JSON.stringify({
+                    inline_keyboard: [
+                        [
+                            {text: "Больше", callback_data: `guessMore_${game._id}`},
+                            {text: "Меньше", callback_data: `guessLess_${game._id}`}
+                        ]
+                    ],
+                }),
+            };
 
-        const opts = {
-            reply_markup: JSON.stringify({
-                inline_keyboard: [
-                    [
-                        {text: "Больше", callback_data: `guessMore_${game._id}`},
-                        {text: "Меньше", callback_data: `guessLess_${game._id}`}
-                    ]
-                ],
-            }),
-        };
+            const message = "Угадайте, будет ли выпадение кубика больше или меньше 3.";
 
-        const message = "Угадайте, будет ли выпадение кубика больше или меньше 3.";
-
-        await sendMessageToPlayer(bot, game.users[0], message, opts);
-        await sendMessageToPlayer(bot, game.users[1], message, opts);
+            bot.sendMessage(game.users[0], message, opts);
+            bot.sendMessage(game.users[1], message, opts);
+        } else {
+            bot.sendMessage(chatId, "Вы не участвуете в текущей игре.");
+        }
     } else {
-        bot.sendMessage(chatId, "Вы не участвуете в текущей игре.");
+        bot.sendMessage(chatId, "У вас недостаточно средств.");
     }
 }
 
 module.exports = {
-    rollDice,
     startDiceGame,
     startCreateDiceGame,
     leaveDiceGame,

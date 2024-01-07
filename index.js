@@ -102,7 +102,7 @@ const start = () => {
         startGameMenu(chatId);
     });
 
-    bot.onText(/Dic e/, (msg) => {
+    bot.onText(/Dice/, (msg) => {
         const chatId = msg.chat.id;
         const opts = {
             reply_markup: JSON.stringify({
@@ -117,8 +117,16 @@ const start = () => {
     });
     bot.onText(/Basketball/, (msg) => {
         const chatId = msg.chat.id;
-        userState[chatId] = "Basketball";
-        startBasketballGame(bot, chatId, userState);
+        const opts = {
+            reply_markup: JSON.stringify({
+                inline_keyboard: [
+                    [{text: "🏀 Список доступных игр", callback_data: "bbListGame"}],
+                    [{text: "➕ Создать игру", callback_data: "createBBGame"}],
+                    [{text: "🔙 Назад", callback_data: "games"}],
+                ],
+            }),
+        };
+        bot.sendMessage(chatId, "🏀 Basketball", opts);
     });
     bot.onText(/Профиль/, (msg) => profileCommandHandler(bot, msg));
     bot.onText(/⬅️ Назад/, (msg) => showGames(msg));
@@ -138,13 +146,6 @@ const start = () => {
             case `guessMore_${gameId}`:
             case `guessLess_${gameId}`:
                 setUserChoice(bot, data, chatId);
-                break;
-            case "newGame":
-                if (userState[chatId] === "Dice") {
-                    startDiceGame(bot, chatId);
-                } else if (userState[chatId] === "Basketball") {
-                    startBasketballGame(chatId, userState);
-                }
                 break;
             case "yesBB":
             case "noBB":
