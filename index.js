@@ -13,7 +13,7 @@ const {
     transferCoins,
     withdrawalAmount, initiateWithdrawal,
 } = require("./services/payment");
-const {startBasketballGame, handleBasketballGame} = require("./services/basketball");
+const {startBasketballGame, handleBasketballGame, startCreateBasketballGame, availableBasketballGames} = require("./services/basketball");
 const {showBonuses, showReferralSystem} = require("./services/referral");
 const {bootstrap, profileCommandHandler} = require("./commands/bootstrap");
 require("dotenv").config();
@@ -136,6 +136,11 @@ const start = () => {
         startDiceGame(bot, msg.chat.id, gameName)
     });
 
+    bot.onText(/🏀 (.+) - (\d+)\$/, (msg, match) => {
+        const gameName = match[1];
+        startBasketballGame(bot, msg.chat.id, gameName)
+    });
+
     bot.on("callback_query", (callbackQuery) => {
         const chatId = callbackQuery.message.chat.id;
         const userId = callbackQuery.message.chat.username;
@@ -147,15 +152,6 @@ const start = () => {
             case `guessLess_${gameId}`:
                 setUserChoice(bot, data, chatId);
                 break;
-            case "yesBB":
-            case "noBB":
-                handleBasketballGame(bot, chatId, callbackQuery.data);
-                break;
-            case "playBasketball":
-                console.log(callbackQuery)
-                userState[chatId] = "Basketball";
-                startBasketballGame(bot, chatId, userState);
-                break;
             case "createDiceGame":
                 startCreateDiceGame(bot, chatId);
                 break;
@@ -164,6 +160,16 @@ const start = () => {
                 break;
             case "leaveDiceGame":
                 leaveDiceGame(bot, chatId);
+                break;
+            case "yesBB":
+            case "noBB":
+                handleBasketballGame(bot, chatId, callbackQuery.data);
+                break;
+            case "createBBGame":
+                startCreateBasketballGame(bot, chatId);
+                break;
+            case "bbListGame":
+                availableBasketballGames(bot, chatId);
                 break;
             case "topup":
                 const inlineKeyboard = [
