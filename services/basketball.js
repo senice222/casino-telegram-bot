@@ -1,7 +1,6 @@
 const {User} = require("../models/UserModel");
 const {Basketball} = require("../models/BasketballGame");
-const {Dice} = require("../models/DiceGame");
-
+const {isValidChoice} = require("../validations/diceGameValidator");
 
 async function availableBasketballGames(bot, chatId) {
     try {
@@ -131,7 +130,7 @@ async function startBasketballGame(bot, chatId, gameName) {
                 }),
             };
 
-            const message = "Угадайте, будет ли выпадение кубика больше или меньше 3.";
+            const message = "Угадайте, попадет ли мяч в кольцо или нет.";
 
             bot.sendMessage(game.users[0], message, opts);
             bot.sendMessage(game.users[1], message, opts);
@@ -176,22 +175,39 @@ async function handleBasketballGame(bot, chatId, userChoice) { // gameplay
     }
 }
 
-function startBasketballGame(bot, chatId, userState) { // setUserChoice
-    const opts = {
-        reply_markup: JSON.stringify({
-            inline_keyboard: [
-                [{text: "Да", callback_data: "yesBB"}],
-                [{text: "Нет", callback_data: "noBB"}],
-            ],
-        }),
-    };
-    userState[chatId] = "Basketball";
-    bot.sendMessage(chatId, "Попадет ли мяч в кольцо?", opts);
+async function setBasketballGameChoice(bot, data, userId) {
+    const parts = data.split('_');
+    const choice = parts[0];
+    const gameId = parts[1];
+    const game = await Basketball.findById(gameId);
+
+    if (await isValidChoice(bot, game, userId, choice)) {
+        const userChoiceIndex = game.choices.findIndex(userChoice => Object.keys(userChoice)[0] === userId);
+        if (userChoiceIndex === -1) {
+            game.choices.push({[userId]: [choice]});
+        } else {
+            game.choices[userChoiceIndex][userId].push(choice);
+        }
+        await game.save();
+
+        if (game.choices.length === 2) {
+            const firstId = game.users[0].toString();
+            const secondId = game.users[1].toString();
+            const userIDs = [firstId, secondId];
+
+            const apiUrl = `https://api.telegram.org/bot${process.env.TOKEN}/sendDice?chat_id=${userIDs}&emoji=🏀`;
+            const response = await fetch(apiUrl, {method: "POST"});
+            const data = await response.json();
+            rollDice(bot, game, data);
+        }
+        bot.sendMessage(userId, "Ваш вибір зроблено!");
+    }
 }
 
 module.exports = {
     startBasketballGame,
     startCreateBasketballGame,
     handleBasketballGame,
-    availableBasketballGames
+    availableBasketballGames,
+    setBasketballGameChoice
 }

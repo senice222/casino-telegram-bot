@@ -1,25 +1,26 @@
 const TelegramBot = require("node-telegram-bot-api");
 const mongoose = require("mongoose");
-const {User} = require("./models/UserModel");
 const {
     startDiceGame,
     startCreateDiceGame,
     leaveDiceGame,
     availableDiceGames,
-    setUserChoice,
+    setDiceUserChoice,
 } = require("./services/dice");
 const {
     requestAmountCrypto,
     transferCoins,
     withdrawalAmount, initiateWithdrawal,
 } = require("./services/payment");
-const {startBasketballGame, handleBasketballGame, startCreateBasketballGame, availableBasketballGames} = require("./services/basketball");
+const {startBasketballGame, handleBasketballGame, startCreateBasketballGame, availableBasketballGames,
+    setBasketballGameChoice
+} = require("./services/basketball");
 const {showBonuses, showReferralSystem} = require("./services/referral");
 const {bootstrap, profileCommandHandler} = require("./commands/bootstrap");
 require("dotenv").config();
 
-const bot = new TelegramBot(process.env.TOKEN, {polling: true});
 
+const bot = new TelegramBot(process.env.TOKEN, {polling: true});
 const mongoURI = process.env.MONGO_URI;
 mongoose.connect(mongoURI, {useNewUrlParser: true, useUnifiedTopology: true});
 const db = mongoose.connection;
@@ -150,8 +151,14 @@ const start = () => {
         switch (callbackQuery.data) {
             case `guessMore_${gameId}`:
             case `guessLess_${gameId}`:
-                setUserChoice(bot, data, chatId);
+                setDiceUserChoice(bot, data, chatId);
                 break;
+            case `Scored_${gameId}`:
+                setBasketballGameChoice(bot, data, userId)
+                break
+            case `Away_${gameId}`:
+                setBasketballGameChoice(bot, data, userId)
+                break
             case "createDiceGame":
                 startCreateDiceGame(bot, chatId);
                 break;

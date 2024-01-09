@@ -2,7 +2,7 @@ const {User} = require("../models/UserModel");
 const {Dice} = require("../models/DiceGame");
 const {isValidChoice} = require("../validations/diceGameValidator");
 
-async function dice(bot, chatId) {
+async function startCreateDiceGame(bot, chatId) {
     try {
         const user = await User.findOne({id: chatId});
         const createGameMessage = `➕ Создание игры в 🎲 DICE\n\n— Минимум: 1 $\n— Баланс: ${user.balance} $\n\nℹ️ Введите размер ставки и название игры (разделенные пробелом, например, "10 MyGame")`;
@@ -75,7 +75,7 @@ async function createDiceGame(bot, userId, amount, gameName) {
         console.error(`Помилка при створенні гри: ${error}`);
         const errorMessage = "Пожалуйста, проверьте правильность заполнения формы.";
         bot.sendMessage(userId, errorMessage);
-        dice(bot, userId);
+        startCreateDiceGame(bot, userId);
     }
 }
 
@@ -201,7 +201,7 @@ async function rollDice(bot, game, data) {
     }
 }
 
-async function setUserChoice(bot, data, userId) {
+async function setDiceUserChoice(bot, data, userId) {
     const parts = data.split('_');
     const choice = parts[0];
     const gameId = parts[1];
@@ -272,8 +272,8 @@ async function startDiceGame(bot, chatId, gameName) {
 
 module.exports = {
     startDiceGame,
-    startCreateDiceGame: dice,
+    startCreateDiceGame,
     leaveDiceGame,
     availableDiceGames,
-    setUserChoice,
+    setDiceUserChoice,
 };
