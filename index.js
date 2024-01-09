@@ -154,10 +154,8 @@ const start = () => {
                 setDiceUserChoice(bot, data, chatId);
                 break;
             case `Scored_${gameId}`:
-                setBasketballGameChoice(bot, data, userId)
-                break
             case `Away_${gameId}`:
-                setBasketballGameChoice(bot, data, userId)
+                setBasketballGameChoice(bot, data, chatId)
                 break
             case "createDiceGame":
                 startCreateDiceGame(bot, chatId);
@@ -167,10 +165,6 @@ const start = () => {
                 break;
             case "leaveDiceGame":
                 leaveDiceGame(bot, chatId);
-                break;
-            case "yesBB":
-            case "noBB":
-                handleBasketballGame(bot, chatId, callbackQuery.data);
                 break;
             case "createBBGame":
                 startCreateBasketballGame(bot, chatId);

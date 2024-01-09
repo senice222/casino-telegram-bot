@@ -1,6 +1,7 @@
 const {User} = require("../models/UserModel");
 const {Dice} = require("../models/DiceGame");
 const {isValidChoice} = require("../validations/diceGameValidator");
+const {toWinner, toLooser} = require("../utils");
 
 async function startCreateDiceGame(bot, chatId) {
     try {
@@ -125,26 +126,6 @@ async function availableDiceGames(bot, chatId) {
         },
     };
     bot.sendMessage(chatId, "Выберите игру для подключения:", options);
-}
-
-async function toWinner(userId, game) {
-    try {
-        const user = await User.findOne({id: userId});
-        user.balance = (parseInt(user.balance) + game.amount).toString();
-        await user.save();
-    } catch (error) {
-        console.error(`Error updating winner's balance: ${error.message}`);
-    }
-}
-
-async function toLooser(userId, game) {
-    try {
-        const user = await User.findOne({id: userId});
-        user.balance = (parseInt(user.balance) - game.amount).toString();
-        await user.save();
-    } catch (error) {
-        console.error(`Error updating loser's balance: ${error.message}`);
-    }
 }
 
 async function rollDice(bot, game, data) {

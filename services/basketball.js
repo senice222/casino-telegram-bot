@@ -1,10 +1,16 @@
 const {User} = require("../models/UserModel");
 const {Basketball} = require("../models/BasketballGame");
 const {isValidChoice} = require("../validations/diceGameValidator");
+const {toWinner, toLooser} = require("../utils");
 
 async function availableBasketballGames(bot, chatId) {
     try {
         const games = await Basketball.find({status: "pending"})
+        if (games.length === 0) {
+            bot.sendMessage(chatId, "Нет доступных игр.");
+            return;
+        }
+
         const Keyboard = games.map(game => [
             {
                 text: `🏀 ${game.name} - ${game.amount}$`,
@@ -76,7 +82,6 @@ async function createBasketballGame(bot, userId, amount, gameName) {
             choices: [],
             status: "pending",
         });
-        console.log(doc)
         await doc.save();
 
         const successMessage = "🏀 Игра создана!";
@@ -142,34 +147,55 @@ async function startBasketballGame(bot, chatId, gameName) {
     }
 }
 
-async function handleBasketballGame(bot, chatId, userChoice) { // gameplay
+async function handleBasketballGame(bot, game, data) {
     try {
-        const data = await bot.sendDice(chatId, {emoji: "🏀"});
-        const diceValue = data.dice.value;
+        const diceValue = data.result.dice.value;
+        const choiceList = game.choices.map(item => {
+            const userId = Object.keys(item)[0];
+            const choiceValue = Object.values(item)[0];
+            return [{[userId]: choiceValue.toString()}];
+        });
+        const flattenedList = choiceList.flat();
+        let obj = { winner: null }
 
-        setTimeout(() => {
-            let resultMessage = "";
-            if (
-                (userChoice === "yesBB" && diceValue === 5) ||
-                diceValue === 4 ||
-                (userChoice === "noBB" && diceValue < 4)
-            ) {
-                resultMessage = `Поздравляем! Мяч попал в корзину! Вы выйграли.`;
-            } else {
-                resultMessage = `Увы, мяч не попал в корзину. Вы проиграли.`;
-            }
+        const options = {
+            reply_markup: JSON.stringify({
+                inline_keyboard: [[{text: "На главную", callback_data: "home"}]],
+            }),
+        };
 
-            const opts = {
-                reply_markup: JSON.stringify({
-                    inline_keyboard: [
-                        [{text: "Новая игра", callback_data: "newGame"}],
-                        [{text: "На главную", callback_data: "home"}],
-                    ],
-                }),
-            };
-
-            bot.sendMessage(chatId, resultMessage, opts);
-        }, 4200);
+        setTimeout(async () => {
+            flattenedList.forEach(userChoice => {
+                const userId = Object.keys(userChoice)[0];
+                const choice = Object.values(userChoice)[0];
+                switch (choice) {
+                    case 'Scored':
+                        if (diceValue >= 4) {
+                            bot.sendMessage(userId, `You guessed correctly!`, options)
+                            obj.winner = userId
+                            toWinner(userId, game)
+                        } else {
+                            bot.sendMessage(userId, `You guessed incorrectly!`, options)
+                            toLooser(userId, game)
+                        }
+                        break;
+                    case 'Away':
+                        if (diceValue < 4) {
+                            bot.sendMessage(userId, `You guessed correctly!`, options)
+                            obj.winner = userId
+                            toWinner(userId, game)
+                        } else {
+                            bot.sendMessage(userId, `You guessed incorrectly!`, options)
+                            toLooser(userId, game)
+                        }
+                        break;
+                    default:
+                        console.log(`Unknown choice for user ${userId}`);
+                }
+            });
+            game.status = 'end'
+            await game.save()
+        }, 5200);
     } catch (error) {
         console.error("Error fetching dice value:", error);
     }
@@ -198,7 +224,7 @@ async function setBasketballGameChoice(bot, data, userId) {
             const apiUrl = `https://api.telegram.org/bot${process.env.TOKEN}/sendDice?chat_id=${userIDs}&emoji=🏀`;
             const response = await fetch(apiUrl, {method: "POST"});
             const data = await response.json();
-            rollDice(bot, game, data);
+            handleBasketballGame(bot, game, data);
         }
         bot.sendMessage(userId, "Ваш вибір зроблено!");
     }
